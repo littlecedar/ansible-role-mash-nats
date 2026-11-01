@@ -161,7 +161,8 @@ molecule test          # nested Docker inside a privileged VM-like container
 
 `molecule test` builds the image in `molecule/default/prepare.yml`, converges the role,
 starts the unit and asserts the security and configuration invariants in
-`molecule/verify_tasks.yml`.
+`molecule/verify_tasks.yml`: a token client completes the NATS handshake, a client without
+the token is refused, and a published message reaches a subscriber.
 
 ## License
 

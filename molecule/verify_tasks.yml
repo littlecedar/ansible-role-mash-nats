@@ -115,6 +115,56 @@
       sh -c 'nc -w 5 {{ nats_identifier }} 4222'
   changed_when: false
 
+# nc only proves the port accepts TCP; nats-server greets before authenticating,
+# so the token contract needs real CONNECT frames.
+- name: Verify an authenticated client completes the NATS handshake
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm --network {{ nats_container_network }} busybox:1.36
+      sh -c '( printf "CONNECT {\"verbose\":true,\"auth_token\":\"{{ nats_molecule_token }}\"}\r\nPING\r\n"; sleep 1 ) | nc -w 3 {{ nats_identifier }} 4222'
+  register: nats_verify_handshake_allowed
+  changed_when: false
+
+- name: Assert the authenticated client is accepted
+  ansible.builtin.assert:
+    that:
+      - "nats_verify_handshake_allowed.stdout is search('(?m)^\\+OK\\r?$')"
+      - "nats_verify_handshake_allowed.stdout is search('(?m)^PONG\\r?$')"
+    fail_msg: "Authenticated client got no +OK/PONG: {{ nats_verify_handshake_allowed.stdout }}"
+
+- name: Verify an unauthenticated client is rejected
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm --network {{ nats_container_network }} busybox:1.36
+      sh -c '( printf "CONNECT {\"verbose\":true}\r\nPING\r\n"; sleep 1 ) | nc -w 3 {{ nats_identifier }} 4222'
+  register: nats_verify_handshake_denied
+  changed_when: false
+
+- name: Assert the unauthenticated client is refused
+  ansible.builtin.assert:
+    that:
+      - "nats_verify_handshake_denied.stdout is search('Authorization Violation')"
+      - "nats_verify_handshake_denied.stdout is not search('(?m)^PONG\\r?$')"
+    fail_msg: "A client without the token got further than Authorization Violation: {{ nats_verify_handshake_denied.stdout }}"
+
+- name: Verify token-authenticated publish reaches a subscriber
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm --network {{ nats_container_network }} busybox:1.36 sh -c '
+      C="CONNECT {\"verbose\":true,\"auth_token\":\"{{ nats_molecule_token }}\"}\r\n";
+      ( printf "$C"; printf "SUB probe 1\r\nPING\r\n"; sleep 4 ) | nc -w 5 {{ nats_identifier }} 4222 > /tmp/sub.out &
+      sleep 2;
+      ( printf "$C"; printf "PUB probe 5\r\nhello\r\nPING\r\n"; sleep 1 ) | nc -w 3 {{ nats_identifier }} 4222 > /dev/null;
+      wait; grep -q hello /tmp/sub.out'
+  register: nats_verify_round_trip
+  changed_when: false
+
+- name: Assert the published message reached the subscriber
+  ansible.builtin.assert:
+    that:
+      - nats_verify_round_trip.rc == 0
+    fail_msg: "Publish did not reach the subscriber: {{ nats_verify_round_trip.stderr }}"
+
 # --- 6. No secret leaks -----------------------------------------------------
 - name: Verify no secret appears in the unit journal
   vars:

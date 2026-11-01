@@ -11,9 +11,11 @@
   vars_files:
     - "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/defaults/main.yml"
   vars:
+    # Token the converge playbook installs; the role default is empty.
+    nats_molecule_token: smoke-nats-token
     # Secrets the converge playbook installs. None may reach a log.
     nats_molecule_secrets:
-      - smoke-nats-token
+      - "{{ nats_molecule_token }}"
   tasks:
     - name: Include the shared NATS verification tasks
       ansible.builtin.include_tasks: "{{ playbook_dir }}/../verify_tasks.yml"
