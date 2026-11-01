@@ -1,0 +1,47 @@
+{#
+SPDX-FileCopyrightText: 2026 Travis Wichert
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+#}
+
+[Unit]
+Description=NATS server ({{ nats_identifier }})
+{% for service in nats_systemd_required_services_list %}
+Requires={{ service }}
+After={{ service }}
+{% endfor %}
+{% for service in nats_systemd_wanted_services_list %}
+Wants={{ service }}
+{% endfor %}
+DefaultDependencies=no
+
+[Service]
+Type=simple
+Environment="HOME={{ devture_systemd_docker_base_systemd_unit_home_path }}"
+ExecStartPre={{ devture_systemd_docker_base_host_command_sh }} -c '{{ nats_container_cleanup_command | trim | replace("\n", " ") }}'
+
+ExecStartPre={{ devture_systemd_docker_base_host_command_docker }} create \
+      --rm \
+      --name={{ nats_identifier }} \
+      --log-driver=none \
+      --user={{ nats_uid }}:{{ nats_gid }} \
+      --read-only \
+      --tmpfs=/tmp:rw,noexec,nosuid,size={{ nats_container_tmpfs_tmp_size }},mode=1777 \
+      --cap-drop=ALL \
+      --security-opt=no-new-privileges \
+      --network={{ nats_container_network }} \
+      --mount type=bind,src={{ nats_base_path }}/nats.conf,dst=/etc/nats/nats.conf,readonly \
+      {{ nats_container_image }} \
+      -c /etc/nats/nats.conf
+
+ExecStart={{ devture_systemd_docker_base_host_command_docker }} start --attach {{ nats_identifier }}
+
+ExecStop=-{{ devture_systemd_docker_base_host_command_sh }} -c '{{ devture_systemd_docker_base_host_command_docker }} stop -t {{ nats_container_stop_grace_time_seconds }} {{ nats_identifier }} 2>/dev/null || true'
+ExecStop=-{{ devture_systemd_docker_base_host_command_sh }} -c '{{ devture_systemd_docker_base_host_command_docker }} rm {{ nats_identifier }} 2>/dev/null || true'
+
+Restart=always
+RestartSec=30
+SyslogIdentifier={{ nats_identifier }}
+
+[Install]
+WantedBy=multi-user.target

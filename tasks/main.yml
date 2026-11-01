@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 Travis Wichert
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+---
+- name: Install NATS
+  tags:
+    - setup-all
+    - setup-nats
+    - install-all
+    - install-nats
+  when: nats_enabled | bool
+  block:
+    - name: Validate NATS configuration
+      ansible.builtin.include_tasks: "{{ role_path }}/tasks/validate_config.yml"
+
+    - name: Install NATS
+      ansible.builtin.include_tasks: "{{ role_path }}/tasks/install.yml"
+
+- name: Uninstall NATS
+  tags:
+    - setup-all
+    - setup-nats
+  when: not (nats_enabled | bool)
+  block:
+    - name: Uninstall NATS
+      ansible.builtin.include_tasks: "{{ role_path }}/tasks/uninstall.yml"

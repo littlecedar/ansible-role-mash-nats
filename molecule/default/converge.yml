@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 Travis Wichert
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+---
+- name: Converge
+  hosts: all
+  become: true
+  vars:
+    nats_enabled: true
+    nats_uid: 1000
+    nats_gid: 1000
+    nats_token: smoke-nats-token
+    # The image is built from this repository's Dockerfile in prepare.
+    nats_container_image: ansible-role-mash-nats:ci
+    nats_container_image_pull: false
+  roles:
+    - role: com.devture.ansible.role.playbook_help
+    - role: com.devture.ansible.role.systemd_docker_base
+    - role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  post_tasks:
+    - name: Start the NATS unit
+      ansible.builtin.systemd_service:
+        name: "{{ nats_identifier }}.service"
+        state: started
+        enabled: true
+        daemon_reload: true

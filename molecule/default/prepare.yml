@@ -1,0 +1,92 @@
+# SPDX-FileCopyrightText: 2026 Travis Wichert
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+---
+- name: Prepare
+  hosts: all
+  become: true
+  vars:
+    nats_molecule_project_directory: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  tasks:
+    - name: Ensure container runtime and verification tools are installed
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-buildx
+          - python3-pip
+          - curl
+          - git
+          - openssl
+          - iproute2
+        state: present
+        update_cache: true
+        cache_valid_time: 600
+
+    - name: Ensure Docker Python bindings are installed
+      ansible.builtin.pip:
+        name: docker
+        state: present
+        extra_args: --break-system-packages
+
+    # The instance's Docker daemon stores its layers on the molecule container's
+    # overlayfs, where buildkit cannot convert whiteout files. vfs is slower but works
+    # in nested Docker; production hosts keep their own storage driver.
+    - name: Ensure the nested Docker daemon uses the vfs storage driver
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        mode: "0644"
+        content: |
+          {"storage-driver":"vfs"}
+
+    - name: Ensure the Docker service is started
+      ansible.builtin.systemd_service:
+        name: docker
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Wait for the Docker daemon socket
+      ansible.builtin.wait_for:
+        path: /var/run/docker.sock
+        timeout: 120
+
+    - name: Wait for the Docker daemon to answer
+      ansible.builtin.command:
+        cmd: docker info
+      register: nats_molecule_docker_info
+      changed_when: false
+      retries: 30
+      delay: 2
+      until: nats_molecule_docker_info.rc == 0
+
+    - name: Verify the nested Docker daemon uses the vfs storage driver
+      ansible.builtin.command:
+        cmd: docker info --format {% raw %}'{{ .Driver }}'{% endraw %}
+      register: nats_molecule_docker_driver
+      changed_when: false
+      failed_when: nats_molecule_docker_driver.stdout | trim != 'vfs'
+
+    - name: Ensure the image build context directory exists
+      ansible.builtin.file:
+        path: /tmp/nats-image
+        state: directory
+        mode: "0755"
+
+    - name: Ensure the image build context exists
+      ansible.builtin.copy:
+        src: "{{ nats_molecule_project_directory }}/Dockerfile"
+        dest: /tmp/nats-image/Dockerfile
+        mode: "0644"
+
+    - name: Ensure the NATS image is built
+      community.docker.docker_image_build:
+        name: ansible-role-mash-nats:ci
+        path: /tmp/nats-image
+        dockerfile: Dockerfile
+        pull: true
+
+    - name: Ensure the connectivity probe image is present
+      community.docker.docker_image_pull:
+        name: busybox:1.36
+        pull: always

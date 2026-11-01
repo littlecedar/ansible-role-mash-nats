@@ -1,0 +1,111 @@
+# SPDX-FileCopyrightText: 2026 Travis Wichert
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+---
+- name: Ensure the NATS base path exists
+  ansible.builtin.file:
+    path: "{{ nats_base_path }}"
+    state: directory
+    mode: "0750"
+    owner: "{{ nats_uid }}"
+    group: "{{ nats_gid }}"
+
+- name: Ensure the internal NATS container network exists via community.docker.docker_network
+  when: devture_systemd_docker_base_container_network_creation_method == 'ansible-module'
+  community.docker.docker_network:
+    name: "{{ nats_container_network }}"
+    driver: bridge
+    internal: true
+    enable_ipv6: "{{ devture_systemd_docker_base_ipv6_enabled }}"
+    driver_options: "{{ devture_systemd_docker_base_container_networks_driver_options }}"
+  register: nats_network_result_ansible_module
+
+- name: Ensure the internal NATS container network exists via ansible.builtin.command
+  when: devture_systemd_docker_base_container_network_creation_method == 'command'
+  ansible.builtin.command:
+    cmd: >-
+      {{ devture_systemd_docker_base_host_command_docker }} network create
+      {% if devture_systemd_docker_base_ipv6_enabled %}--ipv6{% endif %}
+      --internal
+      {{ nats_container_network }}
+  register: nats_network_result_command
+  changed_when: nats_network_result_command.rc == 0
+  failed_when: >-
+    nats_network_result_command.rc != 0
+    and 'already exists' not in nats_network_result_command.stderr
+
+# `community.docker.docker_image_pull` splits `repo:tag@sha256:...` at the `@` and sends
+# an invalid reference to the registry, so digest-pinned images are always pulled with
+# the Docker CLI and the module only handles plain tag references.
+- name: Ensure the digest-pinned NATS container image is pulled via ansible.builtin.command
+  when:
+    - nats_container_image_pull | bool
+    - "'@' in nats_container_image"
+  ansible.builtin.command:
+    cmd: "{{ devture_systemd_docker_base_host_command_docker }} pull {{ nats_container_image }}"
+  register: nats_image_pull_result_digest
+  retries: "{{ devture_playbook_help_container_retries_count }}"
+  delay: "{{ devture_playbook_help_container_retries_delay }}"
+  until: nats_image_pull_result_digest is not failed
+  changed_when: "'Image is up to date' not in nats_image_pull_result_digest.stdout"
+
+- name: Ensure the NATS container image is pulled via community.docker.docker_image_pull
+  when:
+    - nats_container_image_pull | bool
+    - devture_systemd_docker_base_container_image_pull_method == 'ansible-module'
+    - "'@' not in nats_container_image"
+  community.docker.docker_image_pull:
+    name: "{{ nats_container_image }}"
+    pull: always
+  register: nats_image_pull_result_ansible_module
+  retries: "{{ devture_playbook_help_container_retries_count }}"
+  delay: "{{ devture_playbook_help_container_retries_delay }}"
+  until: nats_image_pull_result_ansible_module is not failed
+
+- name: Ensure the NATS container image is pulled via ansible.builtin.command
+  when:
+    - nats_container_image_pull | bool
+    - devture_systemd_docker_base_container_image_pull_method == 'command'
+    - "'@' not in nats_container_image"
+  ansible.builtin.command:
+    cmd: "{{ devture_systemd_docker_base_host_command_docker }} pull {{ nats_container_image }}"
+  register: nats_image_pull_result_command
+  retries: "{{ devture_playbook_help_container_retries_count }}"
+  delay: "{{ devture_playbook_help_container_retries_delay }}"
+  until: nats_image_pull_result_command is not failed
+  changed_when: "'Image is up to date' not in nats_image_pull_result_command.stdout"
+
+# The file carries the bearer token, so the task is `no_log`: neither a successful nor
+# a failing run may print the rendered content.
+- name: Ensure the NATS support file is installed
+  no_log: true
+  ansible.builtin.template:
+    src: "{{ role_path }}/templates/nats.conf.j2"
+    dest: "{{ nats_base_path }}/nats.conf"
+    mode: "0640"
+    owner: "{{ nats_uid }}"
+    group: "{{ nats_gid }}"
+  register: nats_support_file_result
+
+- name: Ensure the NATS systemd unit file is installed
+  ansible.builtin.template:
+    src: "{{ role_path }}/templates/systemd/nats.service.j2"
+    dest: "{{ devture_systemd_docker_base_systemd_path }}/{{ nats_identifier }}.service"
+    mode: "0644"
+  register: nats_systemd_unit_result
+
+- name: Determine whether the NATS unit needs a restart
+  ansible.builtin.set_fact:
+    nats_restart_necessary: >-
+      {{
+        (
+          (nats_support_file_result.changed | default(false))
+          or (nats_systemd_unit_result.changed | default(false))
+          or ((nats_image_pull_result_ansible_module | default({})).changed | default(false))
+          or ((nats_image_pull_result_digest | default({})).changed | default(false))
+          or ((nats_image_pull_result_command | default({})).changed | default(false))
+          or ((nats_network_result_ansible_module | default({})).changed | default(false))
+          or ((nats_network_result_command | default({})).changed | default(false))
+        ) | bool
+      }}

@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Travis Wichert
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+---
+- name: Validate that all required NATS variables are set
+  ansible.builtin.assert:
+    that:
+      - nats_identifier | string | length > 0
+      - nats_base_path | string | length > 0
+      - nats_uid | string | length > 0
+      - nats_gid | string | length > 0
+      - nats_token | string | length > 0
+      - nats_container_image | string | length > 0
+      - nats_container_network | string | length > 0
+    fail_msg: >-
+      NATS is enabled, but one of the required variables is empty.
+      See the role documentation for the list of required variables.

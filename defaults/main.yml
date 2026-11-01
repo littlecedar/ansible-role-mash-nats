@@ -1,0 +1,114 @@
+# SPDX-FileCopyrightText: 2026 Travis Wichert
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# Project source code URL:
+#   nats: https://github.com/nats-io/nats-server
+
+########################################################################
+#                                                                      #
+# Common                                                               #
+#                                                                      #
+########################################################################
+
+# nats_enabled is the master toggle for the whole role.
+nats_enabled: false
+
+nats_identifier: nats
+
+nats_base_path: "/{{ nats_identifier }}"
+
+# The user and group that own the rendered support file and run the container.
+# These are typically injected by the playbook (e.g. `{{ mash_playbook_uid }}`).
+nats_uid: ""
+
+nats_gid: ""
+
+# The bearer token every client presents. The server refuses the protocol
+# before a successful authorization.
+nats_token: ""
+
+########################################################################
+#                                                                      #
+# Network                                                              #
+#                                                                      #
+########################################################################
+
+# The internal container network the server listens on. It is an internal
+# bridge: the container has no host route and publishes no port. Consumers
+# (for example the Nextcloud Talk HPB signaling server) attach their containers
+# to this network and reach the server at `<nats_identifier>:4222`.
+nats_container_network: "{{ nats_identifier }}"
+
+# Controls whether the role removes its own network on uninstall.
+nats_container_network_deletion_enabled: true
+
+########################################################################
+#                                                                      #
+# Image                                                                #
+#                                                                      #
+########################################################################
+
+# Built and published by this repository.
+nats_container_image_tag: "2.15.1"
+
+nats_container_image: "ghcr.io/littlecedar/ansible-role-mash-nats:{{ nats_container_image_tag }}"
+
+# Pull the published image before starting the container. Disable when the image is
+# built or loaded locally.
+nats_container_image_pull: true
+
+########################################################################
+#                                                                      #
+# systemd                                                              #
+#                                                                      #
+########################################################################
+
+nats_systemd_required_services_list: "{{ nats_systemd_required_services_list_default + nats_systemd_required_services_list_auto + nats_systemd_required_services_list_custom }}"
+
+nats_systemd_required_services_list_default: "{{ [devture_systemd_docker_base_docker_service_name] if devture_systemd_docker_base_docker_service_name else [] }}"
+
+nats_systemd_required_services_list_auto: []
+
+nats_systemd_required_services_list_custom: []
+
+nats_systemd_wanted_services_list: "{{ nats_systemd_wanted_services_list_default + nats_systemd_wanted_services_list_auto + nats_systemd_wanted_services_list_custom }}"
+
+nats_systemd_wanted_services_list_default: []
+
+nats_systemd_wanted_services_list_auto: []
+
+nats_systemd_wanted_services_list_custom: []
+
+# Size of the container's tmpfs mount at /tmp (NATS keeps runtime state only in memory).
+nats_container_tmpfs_tmp_size: 16m
+
+nats_container_stop_grace_time_seconds: "{{ devture_systemd_docker_base_container_stop_grace_time_seconds }}"
+
+nats_container_cleanup_timeout_seconds: "{{ devture_systemd_docker_base_container_cleanup_timeout_seconds }}"
+
+nats_container_cleanup_retry_delay_seconds: "{{ devture_systemd_docker_base_container_cleanup_retry_delay_seconds }}"
+
+nats_container_cleanup_command: |
+  i=0;
+  while [ "$i" -lt {{ nats_container_cleanup_timeout_seconds }} ]; do
+  {{ devture_systemd_docker_base_host_command_docker }} stop -t {{ nats_container_stop_grace_time_seconds }} {{ nats_identifier }} >/dev/null 2>&1 || true;
+  {{ devture_systemd_docker_base_host_command_docker }} rm -f {{ nats_identifier }} >/dev/null 2>&1 || true;
+  if {{ devture_systemd_docker_base_host_command_docker }} container inspect {{ nats_identifier }} >/dev/null 2>&1; then
+  i=$((i + 1));
+  sleep {{ nats_container_cleanup_retry_delay_seconds }};
+  continue;
+  fi;
+  if {{ devture_systemd_docker_base_host_command_docker }} info >/dev/null 2>&1; then
+  exit 0;
+  fi;
+  echo "Failed to query Docker daemon while cleaning up {{ nats_identifier }}" >&2;
+  exit 1;
+  done;
+  echo "Failed to remove stale container {{ nats_identifier }} after {{ nats_container_cleanup_timeout_seconds }} attempts" >&2;
+  exit 1
+
+# Controls whether the systemd service manager restarts the unit (when true) or merely
+# starts it (when false). It is computed during installation, based on whether the
+# support file, systemd unit, or image changed.
+nats_restart_necessary: false

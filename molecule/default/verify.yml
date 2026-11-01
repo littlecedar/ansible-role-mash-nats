@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 Travis Wichert
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+---
+- name: Verify
+  hosts: all
+  become: true
+  # The identifier, base path and network come from the role itself, so the assertions
+  # follow the role defaults instead of repeating them.
+  vars_files:
+    - "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/defaults/main.yml"
+  vars:
+    # Secrets the converge playbook installs. None may reach a log.
+    nats_molecule_secrets:
+      - smoke-nats-token
+  tasks:
+    - name: Include the shared NATS verification tasks
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../verify_tasks.yml"

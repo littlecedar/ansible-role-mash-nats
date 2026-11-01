@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: 2026 Travis Wichert
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+---
+- name: Check whether the NATS systemd unit exists
+  ansible.builtin.stat:
+    path: "{{ devture_systemd_docker_base_systemd_path }}/{{ nats_identifier }}.service"
+  register: nats_systemd_unit_stat
+
+- name: Ensure the NATS systemd unit is stopped and disabled
+  when: nats_systemd_unit_stat.stat.exists | bool
+  ansible.builtin.systemd_service:
+    name: "{{ nats_identifier }}.service"
+    state: stopped
+    enabled: false
+
+- name: Ensure the NATS systemd unit file is removed
+  when: nats_systemd_unit_stat.stat.exists | bool
+  ansible.builtin.file:
+    path: "{{ nats_systemd_unit_stat.stat.path }}"
+    state: absent
+
+- name: Reload the systemd daemon after removing the NATS unit
+  when: nats_systemd_unit_stat.stat.exists | bool
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Ensure the internal NATS container network is removed via community.docker.docker_network
+  when:
+    - devture_systemd_docker_base_container_network_creation_method == 'ansible-module'
+    - nats_container_network_deletion_enabled | bool
+  community.docker.docker_network:
+    name: "{{ nats_container_network }}"
+    state: absent
+
+- name: Ensure the internal NATS container network is removed via ansible.builtin.command
+  when:
+    - devture_systemd_docker_base_container_network_creation_method == 'command'
+    - nats_container_network_deletion_enabled | bool
+  ansible.builtin.command:
+    cmd: "{{ devture_systemd_docker_base_host_command_docker }} network rm {{ nats_container_network }}"
+  register: nats_network_removal_result
+  changed_when: nats_network_removal_result.rc == 0
+  failed_when: >-
+    nats_network_removal_result.rc != 0
+    and 'No such network' not in nats_network_removal_result.stderr
+
+- name: Ensure the NATS base path is removed
+  ansible.builtin.file:
+    path: "{{ nats_base_path }}"
+    state: absent
