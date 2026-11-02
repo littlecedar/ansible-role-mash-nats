@@ -153,7 +153,7 @@ and re-running the playbook stops and removes the unit, the container, and — w
 ```sh
 yamllint .
 ansible-lint
-shellcheck scripts/*.sh
+shellcheck scripts/*.sh bin/*.sh
 ansible-galaxy role install -r molecule/default/requirements.yml   # once
 ansible-galaxy collection install community.docker ansible.posix  # once
 molecule test          # nested Docker inside a privileged VM-like container
@@ -169,6 +169,10 @@ the workflow actions, and one per upstream NATS release that moves `ARG NATS_VER
 `ARG NATS_COMMIT` in the `Dockerfile`, `nats_container_image_tag` in `defaults/main.yml`, and
 the image references in this README and the role guide together. The bare `NATS <version>`
 cells next to those references are prose and stay a manual edit.
+
+Workflow actions are pinned to commit digests (`helpers:pinGitHubActionDigests`), so the
+first Renovate run opens a one-off "Pin dependencies" pull request that rewrites the current
+`@v7`-style refs to SHAs with a version comment.
 
 `bin/renovate-smoke-test.sh` validates the configuration and proves every manager still
 extracts its pins; it runs in CI, needs no credentials, and runs offline against the

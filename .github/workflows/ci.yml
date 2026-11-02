@@ -35,11 +35,17 @@ jobs:
       - name: Install collections the role uses
         run: ansible-galaxy collection install community.docker ansible.posix
 
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install --yes shellcheck
+
       - name: Lint YAML
         run: yamllint .
 
       - name: Lint Ansible
         run: ansible-lint
+
+      - name: Lint shell scripts
+        run: shellcheck scripts/*.sh bin/*.sh
 
   image:
     name: Image smoke
