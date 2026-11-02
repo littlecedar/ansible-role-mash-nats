@@ -164,6 +164,10 @@ starts the unit and asserts the security and configuration invariants in
 `molecule/verify_tasks.yml`: a token client completes the NATS handshake, a client without
 the token is refused, and a published message reaches a subscriber.
 
+Workflows pin each action to its floating major tag (`@v7`, not a SHA), so
+`.github/dependabot.yml` opens one grouped PR a week when a new major lands. Merging it is
+the whole upgrade; the `Pull request` CI run is the proof.
+
 ## License
 
 AGPL-3.0-or-later. See [`LICENSE`](LICENSE).
