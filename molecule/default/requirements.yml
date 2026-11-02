@@ -14,5 +14,7 @@ roles:
 collections:
   - name: community.docker
     version: ">=4.0.0"
+  # Not used by this role: molecule-plugins[docker]'s create.yml calls
+  # ansible.posix.synchronize, resolved at parse time even when it does not run.
   - name: ansible.posix
     version: ">=1.5.0"
