@@ -1,0 +1,88 @@
+# SPDX-FileCopyrightText: 2026 Travis Wichert
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+---
+name: Renovate
+
+on:  # yamllint disable-line rule:truthy
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run without making changes'
+        required: false
+        default: false
+        type: boolean
+      log_level:
+        description: 'Renovate log level'
+        required: false
+        default: 'info'
+        type: choice
+        options:
+          - info
+          - debug
+
+permissions:
+  contents: read
+
+concurrency:
+  group: renovate
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Decide whether to run Renovate
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.decision.outputs.should_run }}
+
+    steps:
+      - name: Check for Renovate App credentials
+        id: decision
+        shell: bash
+        env:
+          CLIENT_ID: ${{ vars.GH_APP_RENOVATE_CLIENT_ID }}
+          PRIVATE_KEY: ${{ secrets.GH_APP_RENOVATE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "$CLIENT_ID" && -n "$PRIVATE_KEY" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "Renovate App credentials present"
+          else
+            # Exits green instead of red until the App is installed on this repository
+            # and GH_APP_RENOVATE_CLIENT_ID / GH_APP_RENOVATE_PRIVATE_KEY are set.
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Renovate skipped: no GH_APP_RENOVATE_CLIENT_ID variable or GH_APP_RENOVATE_PRIVATE_KEY secret"
+          fi
+
+  renovate:
+    name: Renovate
+    needs: preflight
+    if: needs.preflight.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create Renovate App token
+        id: renovate_token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.GH_APP_RENOVATE_CLIENT_ID }}
+          private-key: ${{ secrets.GH_APP_RENOVATE_PRIVATE_KEY }}
+
+      - name: Run Renovate
+        uses: renovatebot/github-action@v46
+        with:
+          token: ${{ steps.renovate_token.outputs.token }}
+          renovate-version: ${{ env.NATS_RENOVATE_VERSION }}
+        env:
+          # renovate: datasource=docker depName=nats-renovate-runner packageName=ghcr.io/renovatebot/renovate
+          NATS_RENOVATE_VERSION: '44.202.1'
+          LOG_LEVEL: ${{ inputs.log_level || 'info' }}
+          # Renovate can log a startup crash and still exit 0.
+          NODE_OPTIONS: --unhandled-rejections=strict
+          RENOVATE_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'full' || '' }}
+          RENOVATE_PLATFORM: github
+          RENOVATE_PLATFORM_COMMIT: enabled
+          RENOVATE_REPOSITORIES: ${{ github.repository }}

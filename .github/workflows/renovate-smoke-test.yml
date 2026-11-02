@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 Travis Wichert
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+---
+name: Renovate smoke test
+
+on:  # yamllint disable-line rule:truthy
+  push:
+    paths:
+      - '.github/renovate.json'
+      - '.github/workflows/renovate-smoke-test.yml'
+      - '.github/workflows/renovate.yml'
+      - 'bin/renovate-smoke-test.sh'
+  pull_request:
+    paths:
+      - '.github/renovate.json'
+      - '.github/workflows/renovate-smoke-test.yml'
+      - '.github/workflows/renovate.yml'
+      - 'bin/renovate-smoke-test.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate config and extraction
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Validate configuration and extract dependencies
+        run: ./bin/renovate-smoke-test.sh

@@ -3,3 +3,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 version = 1
+
+# Files which cannot carry an SPDX header in their own syntax
+[[annotations]]
+path = [".github/renovate.json"]
+SPDX-FileCopyrightText = "NONE"
+SPDX-License-Identifier = "CC0-1.0"

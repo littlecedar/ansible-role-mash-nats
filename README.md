@@ -164,9 +164,17 @@ starts the unit and asserts the security and configuration invariants in
 `molecule/verify_tasks.yml`: a token client completes the NATS handshake, a client without
 the token is refused, and a published message reaches a subscriber.
 
-Workflows pin each action to its floating major tag (`@v7`, not a SHA), so
-`.github/dependabot.yml` opens one grouped PR a week when a new major lands. Merging it is
-the whole upgrade; the `Pull request` CI run is the proof.
+Dependencies are updated by Renovate (`.github/renovate.json`): one grouped pull request for
+the workflow actions, and one per upstream NATS release that moves `ARG NATS_VERSION` and
+`ARG NATS_COMMIT` in the `Dockerfile`, `nats_container_image_tag` in `defaults/main.yml`, and
+the image references in this README and the role guide together. The bare `NATS <version>`
+cells next to those references are prose and stay a manual edit.
+
+`bin/renovate-smoke-test.sh` validates the configuration and proves every manager still
+extracts its pins; it runs in CI, needs no credentials, and runs offline against the
+committed tree. The `Renovate` workflow is self-hosted and skips itself with a notice until
+`GH_APP_RENOVATE_CLIENT_ID` (variable) and `GH_APP_RENOVATE_PRIVATE_KEY` (secret) exist for a
+GitHub App with contents, pull-request and workflow write access.
 
 ## License
 

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommitsDisabled",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "labels": ["dependencies"],
+  "dependencyDashboard": true,
+  "branchConcurrentLimit": 3,
+  "prConcurrentLimit": 2,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Go toolchain used to build nats-server",
+      "managerFilePatterns": ["/^Dockerfile$/"],
+      "matchStrings": ["ARG GO_VERSION=(?<currentValue>[\\d.]+)"],
+      "depNameTemplate": "golang",
+      "datasourceTemplate": "golang-version"
+    },
+    {
+      "customType": "regex",
+      "description": "NATS upstream tag and the commit the build verifies. Both move together: the Dockerfile fails the build when the tag no longer points at NATS_COMMIT",
+      "managerFilePatterns": ["/^Dockerfile$/"],
+      "matchStrings": ["ARG NATS_VERSION=(?<currentValue>\\S+)\\s+ARG NATS_COMMIT=(?<currentDigest>[a-f0-9]{40})"],
+      "depNameTemplate": "nats-io/nats-server",
+      "datasourceTemplate": "github-tags"
+    },
+    {
+      "customType": "regex",
+      "description": "Published image tag that mirrors the NATS version",
+      "managerFilePatterns": ["/^defaults\\/main\\.yml$/"],
+      "matchStrings": ["nats_container_image_tag:\\s+\"(?<currentValue>[^\"]+)\""],
+      "depNameTemplate": "nats-io/nats-server",
+      "datasourceTemplate": "github-tags"
+    },
+    {
+      "customType": "regex",
+      "description": "Image references in the README and role documentation. The bare `NATS <version>` cells next to them are prose and stay a manual edit",
+      "managerFilePatterns": ["/^README\\.md$/", "/^docs\\/configuring-nats\\.md$/"],
+      "matchStrings": ["ghcr\\.io/littlecedar/ansible-role-mash-nats:(?<currentValue>[\\d.]+)"],
+      "depNameTemplate": "nats-io/nats-server",
+      "datasourceTemplate": "github-tags"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "One pull request per upstream NATS release across the Dockerfile, the role default and the documentation",
+      "matchDepNames": ["nats-io/nats-server"],
+      "groupName": "nats-server"
+    },
+    {
+      "description": "One pull request for all workflow action updates",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions"
+    }
+  ]
+}
