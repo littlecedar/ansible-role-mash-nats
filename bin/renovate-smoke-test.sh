@@ -68,10 +68,12 @@ if ! jq --slurp --exit-status '
             and ((.currentDigest // "") | test("^[0-9a-f]{40}$")))
     )
     and any(.[];
-        .msg == "Extracted dependencies"
-        and (.packageFiles.regex | keys) as $files
-        | all(["Dockerfile", "defaults/main.yml", "README.md", "docs/configuring-nats.md"][];
-            . as $wanted | $files | index($wanted))
+        select(.msg == "Extracted dependencies")
+        | [.packageFiles.regex[]?.packageFile] as $files
+        | all(
+            ["Dockerfile", "defaults/main.yml", "README.md", "docs/configuring-nats.md"][];
+            . as $wanted | ($files | index($wanted)) != null
+        )
     )
 ' "$log_file"; then
     echo 'Renovate did not extract every expected dependency' >&2
