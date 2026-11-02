@@ -55,7 +55,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=sha,prefix=sha-,format=short
+            type=sha,prefix=sha-,format=short,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=${{ steps.pin.outputs.nats_version }},enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
